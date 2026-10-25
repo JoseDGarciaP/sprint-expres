@@ -60,11 +60,11 @@ export async function guardarResultado(fila) {
   if (error) throw error
 }
 
-// Mejor partida de cada persona, ordenada por puntaje y luego por menor tiempo.
+// Mejor partida de cada estudiante (por código), ordenada por puntaje y luego por menor tiempo.
 function rankingDe(filas, limite) {
   const mejores = new Map()
   for (const f of filas) {
-    const k = `${f.nombre.toLowerCase()}|${f.codigo ?? ''}`
+    const k = f.codigo || f.nombre.toLowerCase()
     const p = mejores.get(k)
     if (!p || f.puntaje > p.puntaje || (f.puntaje === p.puntaje && f.duracion_seg < p.duracion_seg)) mejores.set(k, f)
   }

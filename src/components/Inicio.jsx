@@ -8,17 +8,32 @@ const PASOS = [
   ['Revisión', 'Cierra el sprint con unas preguntas sobre los procesos 10.1, 10.2 y 10.3.'],
 ]
 
+// El código estudiantil siempre es 019 + 4 dígitos. El prefijo va fijo en el campo.
+export const PREFIJO_CODIGO = '019'
+const DIGITOS_CODIGO = 4
+
+// Acepta lo que escriban o peguen: "2349", "0192349" o "019-2349" → "2349".
+function soloFinal(valor) {
+  let d = valor.replace(/\D/g, '')
+  if (d.length > DIGITOS_CODIGO && d.startsWith(PREFIJO_CODIGO)) d = d.slice(PREFIJO_CODIGO.length)
+  return d.slice(0, DIGITOS_CODIGO)
+}
+
 export default function Inicio({ onEmpezar, modoLocal }) {
   const [nombre, setNombre] = useState('')
-  const [codigo, setCodigo] = useState('')
+  const [finCodigo, setFinCodigo] = useState('')
+  const [tocado, setTocado] = useState(false)
   const [enviando, setEnviando] = useState(false)
-  const valido = nombre.trim().length >= 3
+  const nombreValido = nombre.trim().length >= 3
+  const codigoValido = finCodigo.length === DIGITOS_CODIGO
+  const valido = nombreValido && codigoValido
 
   const enviar = async (e) => {
     e.preventDefault()
+    setTocado(true)
     if (!valido || enviando) return
     setEnviando(true)
-    await onEmpezar({ nombre: nombre.trim().replace(/\s+/g, ' '), codigo: codigo.trim() })
+    await onEmpezar({ nombre: nombre.trim().replace(/\s+/g, ' '), codigo: PREFIJO_CODIGO + finCodigo })
   }
 
   return (
@@ -50,18 +65,41 @@ export default function Inicio({ onEmpezar, modoLocal }) {
                 className="rounded-md border-2 border-linea px-3 py-2.5 text-base outline-none focus:border-tinta"
               />
             </label>
-            <label className="grid gap-1.5">
-              <span className="text-sm font-bold">
-                Código estudiantil <span className="font-normal text-gris">(opcional)</span>
-              </span>
-              <input
-                inputMode="numeric"
-                maxLength={20}
-                value={codigo}
-                onChange={(e) => setCodigo(e.target.value.replace(/[^\d]/g, ''))}
-                className="rounded-md border-2 border-linea px-3 py-2.5 text-base outline-none focus:border-tinta"
-              />
-            </label>
+            <div className="grid gap-1.5">
+              <label htmlFor="codigo" className="text-sm font-bold">
+                Código estudiantil
+              </label>
+              <div
+                className={`flex items-stretch overflow-hidden rounded-md border-2 focus-within:border-tinta ${
+                  tocado && !codigoValido ? 'border-rojo' : 'border-linea'
+                }`}
+              >
+                <span className="flex items-center bg-tablero px-3 font-semibold tracking-widest text-gris select-none" aria-hidden="true">
+                  {PREFIJO_CODIGO}
+                </span>
+                <input
+                  id="codigo"
+                  required
+                  inputMode="numeric"
+                  autoComplete="off"
+                  pattern="[0-9]{4}"
+                  maxLength={12}
+                  placeholder="0000"
+                  aria-describedby="ayuda-codigo"
+                  aria-invalid={tocado && !codigoValido}
+                  aria-label={`Código estudiantil: últimos ${DIGITOS_CODIGO} dígitos después de ${PREFIJO_CODIGO}`}
+                  value={finCodigo}
+                  onChange={(e) => setFinCodigo(soloFinal(e.target.value))}
+                  onBlur={() => finCodigo && setTocado(true)}
+                  className="w-full min-w-0 px-3 py-2.5 text-base tracking-widest outline-none focus-visible:outline-none"
+                />
+              </div>
+              <p id="ayuda-codigo" className={`text-xs ${tocado && !codigoValido ? 'font-semibold text-rojo' : 'text-gris'}`}>
+                {tocado && !codigoValido
+                  ? `Faltan ${DIGITOS_CODIGO - finCodigo.length} dígito${DIGITOS_CODIGO - finCodigo.length === 1 ? '' : 's'}. El código tiene 7 dígitos y empieza por ${PREFIJO_CODIGO}.`
+                  : `Escribe los últimos ${DIGITOS_CODIGO} dígitos; el ${PREFIJO_CODIGO} ya está puesto.`}
+              </p>
+            </div>
             <button
               type="submit"
               disabled={!valido || enviando}

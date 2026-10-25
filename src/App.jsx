@@ -27,7 +27,8 @@ const CLAVE_PARTIDA = 'sprint-expres:partida'
 function partidaGuardada() {
   try {
     const s = JSON.parse(sessionStorage.getItem(CLAVE_PARTIDA))
-    return s && s.fase && s.fase !== 'fin' && s.jugador ? s : null
+    const codigoOk = /^019\d{4}$/.test(s?.jugador?.codigo ?? '')
+    return s && s.fase && s.fase !== 'fin' && codigoOk ? s : null
   } catch {
     return null
   }

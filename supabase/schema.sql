@@ -36,6 +36,15 @@ create table if not exists public.resultados (
 alter table public.resultados drop constraint if exists resultados_puntaje_check;
 alter table public.resultados add constraint resultados_puntaje_check check (puntaje between 0 and 5000);
 
+-- Código estudiantil obligatorio: 7 dígitos que empiezan por 019 (por ejemplo 0192349).
+-- NOT VALID: no revisa filas viejas de prueba, pero sí todas las nuevas.
+alter table public.ingresos   drop constraint if exists ingresos_codigo_formato;
+alter table public.ingresos   add constraint ingresos_codigo_formato
+  check (codigo is not null and codigo ~ '^019[0-9]{4}$') not valid;
+alter table public.resultados drop constraint if exists resultados_codigo_formato;
+alter table public.resultados add constraint resultados_codigo_formato
+  check (codigo is not null and codigo ~ '^019[0-9]{4}$') not valid;
+
 create index if not exists resultados_puntaje_idx on public.resultados (puntaje desc, duracion_seg asc);
 
 -- PIN del panel, guardado cifrado dentro de la base de datos (no en la página web).
@@ -68,7 +77,7 @@ grant usage on schema public to anon;
 grant insert on public.ingresos, public.resultados to anon;
 revoke all on public.config from anon, authenticated;
 
--- ───────── Ranking público: solo nombre y puntaje (mejor partida de cada persona) ─────────
+-- ───────── Ranking público: solo nombre y puntaje (mejor partida de cada estudiante, por código) ─────────
 create or replace function public.ranking(limite int default 10)
 returns table (partida_id uuid, nombre text, puntaje int, duracion_seg int)
 language sql
@@ -77,10 +86,10 @@ set search_path = public, extensions
 as $$
   select partida_id, nombre, puntaje, duracion_seg
   from (
-    select distinct on (lower(nombre), coalesce(codigo, ''))
+    select distinct on (coalesce(codigo, lower(nombre)))
       partida_id, nombre, puntaje, duracion_seg
     from resultados
-    order by lower(nombre), coalesce(codigo, ''), puntaje desc, duracion_seg asc
+    order by coalesce(codigo, lower(nombre)), puntaje desc, duracion_seg asc
   ) mejores
   order by puntaje desc, duracion_seg asc
   limit least(greatest(limite, 1), 50);
