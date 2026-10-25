@@ -1,0 +1,86 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-rojo: #c00000;
+  --color-vino: #7a0a0a;
+  --color-tinta: #1d1b1b;
+  --color-gris: #6e6e6e;
+  --color-linea: #d9d9d9;
+  --color-tablero: #f1f1f1;
+  --color-nota-amarillo: #ffe27a;
+  --color-nota-rosa: #ffc2cd;
+  --color-nota-azul: #b5dcf5;
+  --color-acierto: #1f7a3f;
+
+  --font-display: 'Poppins', system-ui, sans-serif;
+  --font-sans: 'Nunito Sans', system-ui, sans-serif;
+}
+
+html,
+body {
+  background: #ffffff;
+  color: var(--color-tinta);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Título con la misma voz que las diapositivas: Poppins extra negrita, itálica */
+.titulo {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-style: italic;
+  letter-spacing: -0.02em;
+  line-height: 1.02;
+}
+
+/* Nota adhesiva */
+.nota {
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.06), 0 6px 10px -6px rgba(0, 0, 0, 0.35);
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+.nota:nth-child(odd) { transform: rotate(-1.2deg); }
+.nota:nth-child(even) { transform: rotate(1deg); }
+.nota.movible:hover,
+.nota.movible:focus-visible {
+  transform: rotate(0deg) translateY(-2px);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.06), 0 12px 16px -8px rgba(0, 0, 0, 0.4);
+}
+.nota-amarillo { background: var(--color-nota-amarillo); }
+.nota-rosa { background: var(--color-nota-rosa); }
+.nota-azul { background: var(--color-nota-azul); }
+
+/* Una nota recién movida "aterriza" en su nueva columna */
+@keyframes aterrizar {
+  from { opacity: 0; transform: translateX(-14px) rotate(-4deg) scale(0.96); }
+  to { opacity: 1; }
+}
+.nota.recien { animation: aterrizar 260ms ease-out; }
+
+/* Cinta de "bloqueada" */
+.bloqueada::after {
+  content: 'Bloqueada';
+  position: absolute;
+  inset: auto -4px 38% -4px;
+  background: var(--color-tinta);
+  color: #fff;
+  font: 700 11px/1 var(--font-sans);
+  letter-spacing: 0.04em;
+  text-align: center;
+  padding: 5px 0;
+  transform: rotate(-6deg);
+}
+
+@keyframes subir {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: none; }
+}
+.panel-entrada { animation: subir 220ms ease-out; }
+
+:focus-visible {
+  outline: 3px solid var(--color-rojo);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
