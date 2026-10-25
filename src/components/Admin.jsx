@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { obtenerPanel, modoLocal, PinIncorrecto } from '../lib/storage.js'
+import { obtenerPanel, modoLocal, PinIncorrecto, PanelBloqueado } from '../lib/storage.js'
 import { formatoDuracion } from './Resultados.jsx'
 import { DIAS_SPRINT, EVENTOS, REVISION, STANDUP, TAREAS } from '../data/content.js'
 import { PREGUNTAS_REVISION } from '../game/engine.js'
 
-const CLAVE_PIN = 'sprint-expres:pin'
 const hora = (iso) =>
   iso ? new Date(iso).toLocaleString('es-CO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''
 
@@ -15,9 +14,10 @@ const TEXTOS = new Map([
 ])
 
 export default function Admin() {
-  const [pin, setPin] = useState(() => {
-    try { return sessionStorage.getItem(CLAVE_PIN) ?? '' } catch { return '' }
-  })
+  // El PIN vive solo en la memoria de esta página: no se guarda en el navegador.
+  // Al recargar o cerrar la pestaña hay que escribirlo de nuevo.
+  const [pin, setPin] = useState('')
+  const [verPin, setVerPin] = useState(false)
   const [entro, setEntro] = useState(false)
   const [datos, setDatos] = useState({ ingresos: [], resultados: [] })
   const [error, setError] = useState(null)
@@ -32,24 +32,28 @@ export default function Admin() {
       setEntro(true)
       setError(null)
       setActualizado(new Date())
-      try { sessionStorage.setItem(CLAVE_PIN, p) } catch { /* sin almacenamiento */ }
+      setVerPin(false)
     } catch (e) {
       if (e instanceof PinIncorrecto) {
         setEntro(false)
-        try { sessionStorage.removeItem(CLAVE_PIN) } catch { /* sin almacenamiento */ }
-        setError('PIN incorrecto.')
+        setPin('')
+        setError(
+          e.restantes == null
+            ? 'PIN incorrecto.'
+            : e.restantes > 0
+              ? `PIN incorrecto. Te ${e.restantes === 1 ? 'queda 1 intento' : `quedan ${e.restantes} intentos`} antes de un bloqueo de 15 minutos.`
+              : 'PIN incorrecto. El panel quedó bloqueado 15 minutos desde esta conexión.',
+        )
+      } else if (e instanceof PanelBloqueado) {
+        setEntro(false)
+        setPin('')
+        setError(`Demasiados intentos fallidos. Espera ${e.minutos} minuto${e.minutos === 1 ? '' : 's'} y vuelve a intentarlo.`)
       } else {
         setError(`No se pudieron consultar los datos: ${e.message ?? 'error de red'}`)
       }
     } finally {
       setCargando(false)
     }
-  }, [])
-
-  // Si el PIN ya estaba guardado en esta pestaña, entra directo.
-  useEffect(() => {
-    if (pin) cargar(pin)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -123,18 +127,37 @@ export default function Admin() {
             if (pin) cargar(pin)
           }}
         >
-          <label className="grid gap-1.5">
-            <span className="text-sm font-bold">PIN</span>
-            <input
-              type="password"
-              autoFocus
-              value={pin}
-              onChange={(e) => setPin(e.target.value)}
-              className="rounded-md border-2 border-linea px-3 py-2.5 outline-none focus:border-tinta"
-            />
-          </label>
-          {error && <p className="text-sm font-semibold text-rojo">{error}</p>}
-          <button disabled={cargando} className="rounded-md bg-rojo px-5 py-3 font-display font-semibold text-white hover:bg-vino disabled:opacity-60">
+          <div className="grid gap-1.5">
+            <label htmlFor="pin" className="text-sm font-bold">PIN</label>
+            <div className="flex items-stretch overflow-hidden rounded-md border-2 border-linea focus-within:border-tinta">
+              <input
+                id="pin"
+                type={verPin ? 'text' : 'password'}
+                autoFocus
+                autoComplete="off"
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
+                value={pin}
+                onChange={(e) => setPin(e.target.value)}
+                aria-describedby={error ? 'error-pin' : undefined}
+                className="w-full min-w-0 px-3 py-2.5 outline-none focus-visible:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => setVerPin((v) => !v)}
+                aria-pressed={verPin}
+                aria-controls="pin"
+                aria-label={verPin ? 'Ocultar PIN' : 'Mostrar PIN'}
+                title={verPin ? 'Ocultar PIN' : 'Mostrar PIN'}
+                className="grid w-12 shrink-0 place-items-center border-l-2 border-linea text-gris hover:bg-tablero hover:text-tinta"
+              >
+                <IconoOjo tachado={verPin} />
+              </button>
+            </div>
+          </div>
+          {error && <p id="error-pin" role="alert" className="text-sm font-semibold text-rojo">{error}</p>}
+          <button disabled={cargando || !pin} className="rounded-md bg-rojo px-5 py-3 font-display font-semibold text-white hover:bg-vino disabled:opacity-60">
             {cargando ? 'Verificando…' : 'Entrar'}
           </button>
           <a href="#" className="text-sm text-gris underline">Volver al juego</a>
@@ -151,7 +174,18 @@ export default function Admin() {
           <h1 className="font-display text-2xl font-semibold">Panel de resultados</h1>
           {modoLocal && <p className="mt-1 text-sm text-gris">Modo local: solo ves las partidas jugadas en este navegador.</p>}
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => {
+              setEntro(false)
+              setPin('')
+              setError(null)
+              setDatos({ ingresos: [], resultados: [] })
+            }}
+            className="rounded-md border-2 border-linea px-4 py-2 text-sm font-bold hover:border-tinta"
+          >
+            Salir
+          </button>
           <button onClick={() => cargar(pin)} className="rounded-md border-2 border-linea px-4 py-2 text-sm font-bold hover:border-tinta">
             {cargando ? 'Actualizando…' : 'Actualizar'}
           </button>
@@ -243,5 +277,16 @@ export default function Admin() {
         Se actualiza solo cada 15 segundos{actualizado ? `. Última actualización: ${actualizado.toLocaleTimeString('es-CO')}` : '.'}
       </p>
     </main>
+  )
+}
+
+// Ojo abierto = el PIN está oculto (al pulsarlo se muestra); ojo tachado = el PIN está visible.
+function IconoOjo({ tachado }) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" />
+      <circle cx="12" cy="12" r="3" />
+      {tachado && <path d="M3 3l18 18" />}
+    </svg>
   )
 }

@@ -81,18 +81,30 @@ export async function obtenerRanking(limite = 10) {
   return data
 }
 
-export class PinIncorrecto extends Error {}
+export class PinIncorrecto extends Error {
+  constructor(restantes) {
+    super('PIN incorrecto')
+    this.restantes = restantes // intentos que quedan antes del bloqueo (null si no se sabe)
+  }
+}
+export class PanelBloqueado extends Error {
+  constructor(minutos) {
+    super('Demasiados intentos')
+    this.minutos = minutos
+  }
+}
 
+// El PIN viaja por HTTPS y se verifica en la base de datos contra un hash bcrypt.
+// La base de datos bloquea 15 minutos tras 5 intentos fallidos desde la misma conexión.
 export async function obtenerPanel(pin) {
   if (modoLocal) {
-    if (pin !== PIN_LOCAL) throw new PinIncorrecto('PIN incorrecto')
+    if (pin !== PIN_LOCAL) throw new PinIncorrecto(null)
     return { ingresos: leerLocal(LS_INGRESOS).reverse(), resultados: leerLocal(LS_RESULTADOS) }
   }
   const { data, error } = await supabase.rpc('panel_datos', { pin })
-  if (error) {
-    if (error.code === '28P01' || /PIN/i.test(error.message)) throw new PinIncorrecto('PIN incorrecto')
-    throw error
-  }
+  if (error) throw error
+  if (data?.error === 'bloqueado') throw new PanelBloqueado(data.minutos)
+  if (data?.error === 'pin') throw new PinIncorrecto(data.restantes)
   return data
 }
 

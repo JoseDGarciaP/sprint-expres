@@ -96,25 +96,66 @@ as $$
 $$;
 
 -- ───────── Panel: todos los datos, solo con el PIN correcto ─────────
-create or replace function public.panel_datos(pin text)
+-- Límite de intentos: tras 5 PIN incorrectos desde la misma conexión, se bloquea 15 minutos.
+-- (La conexión se guarda como un hash, no como la IP real.)
+create table if not exists public.intentos_panel (
+  id      bigserial primary key,
+  origen  text not null,
+  momento timestamptz not null default now()
+);
+create index if not exists intentos_panel_origen_idx on public.intentos_panel (origen, momento);
+alter table public.intentos_panel enable row level security;
+revoke all on public.intentos_panel from anon, authenticated;
+
+-- La función ya no lanza error con un PIN incorrecto: responde {"error": ...}
+-- para que el intento fallido quede registrado (un error desharía el registro).
+drop function if exists public.panel_datos(text);
+create function public.panel_datos(pin text)
 returns json
 language plpgsql
 security definer
 set search_path = public, extensions
 as $$
 declare
+  max_fallos constant int := 5;
+  ventana    constant interval := interval '15 minutes';
   guardado text;
+  quien    text;
+  fallos   int;
+  primero  timestamptz;
 begin
-  select valor into guardado from config where clave = 'admin_pin';
-  if guardado is null or crypt(pin, guardado) <> guardado then
-    raise exception 'PIN incorrecto' using errcode = '28P01';
+  quien := md5(coalesce(
+    nullif(trim(split_part(current_setting('request.headers', true)::json->>'x-forwarded-for', ',', 1)), ''),
+    'sin-origen'));
+
+  delete from intentos_panel where momento < now() - interval '1 day';
+
+  select count(*), min(momento) into fallos, primero
+  from intentos_panel
+  where origen = quien and momento > now() - ventana;
+
+  if fallos >= max_fallos then
+    return json_build_object(
+      'error', 'bloqueado',
+      'minutos', greatest(1, ceil(extract(epoch from (primero + ventana - now())) / 60))::int);
   end if;
+
+  select valor into guardado from config where clave = 'admin_pin';
+  if guardado is null or pin is null or crypt(pin, guardado) <> guardado then
+    insert into intentos_panel (origen) values (quien);
+    return json_build_object('error', 'pin', 'restantes', max_fallos - fallos - 1);
+  end if;
+
+  delete from intentos_panel where origen = quien;
   return json_build_object(
     'ingresos',   coalesce((select json_agg(i order by i.iniciado_en desc) from ingresos i), '[]'::json),
     'resultados', coalesce((select json_agg(r order by r.puntaje desc) from resultados r), '[]'::json)
   );
 end;
 $$;
+
+-- Si alguien te bloquea a propósito, desbloquea todo ejecutando:
+--   delete from public.intentos_panel;
 
 revoke all on function public.ranking(int)      from public;
 revoke all on function public.panel_datos(text) from public;
